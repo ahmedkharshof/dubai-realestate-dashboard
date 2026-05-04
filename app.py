@@ -1,57 +1,73 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import os
+import re
 
 # 1. إعداد الصفحة
 st.set_page_config(page_title="Dubai Real Estate Dashboard", page_icon="🏢", layout="wide")
 
 # 2. نظام الحماية (Password Protection)
 st.sidebar.title("🛡️ Secure Access")
-password = st.sidebar.text_input("Enter Password to Unlock", type="password")
-
+password = st.sidebar.text_input("Enter Password", type="password")
 if password != "AhmedDash2026":
-    st.title("Dubai Luxury Real Estate Portfolio")
-    st.markdown("---")
-    if password == "":
-        st.info("👋 Welcome! Please enter the access code provided by **Ahmed Dash**.")
-    else:
-        st.error("🚫 Invalid Password.")
+    st.info("👋 Welcome! Please enter the access code to unlock the portfolio.")
     st.stop()
 
-# 3. التنسيق الجمالي (Luxury Style)
+# 3. التنسيق الجمالي المحسن (Luxury Aesthetic)
 st.markdown("""
 <style>
-    .stApp { background-color: #1A1A1A; color: #FFFFFF; font-family: 'Inter', sans-serif; }
-    h1, h2, h3, h4, h5, h6 { color: #D4AF37 !important; font-family: 'Playfair Display', serif; }
-    .gold-text { color: #D4AF37 !important; }
+    .stApp { background-color: #0E1117; color: #FFFFFF; }
+    h1, h2, h3 { color: #D4AF37 !important; font-family: 'Playfair Display', serif; }
+    .gold-text { color: #D4AF37 !important; font-weight: bold; }
+    .stTabs [aria-selected="true"] { color: #D4AF37 !important; border-bottom-color: #D4AF37 !important; }
+    div[data-testid="stExpander"] { border: 1px solid #333; background-color: #1A1C23; }
 </style>
 """, unsafe_allow_html=True)
 
-# 4. محرك البحث الديناميكي عن البيانات (Dynamic Core Engine)
+# 4. محرك استخراج البيانات المطور
 @st.cache_data
 def load_data(file_path):
     xl = pd.ExcelFile(file_path)
     all_data = {}
     
     for sheet_name in xl.sheet_names:
-        df = xl.parse(sheet_name, header=None).astype(str)
-        # استبدال 'nan' بفراغ حقيقي لسهولة المعالجة
-        df = df.replace('nan', '')
+        df = xl.parse(sheet_name, header=None).astype(str).replace('nan', '')
         
-        project_info = {"name": sheet_name, "details": {}, "units": []}
+        project = {
+            "name": sheet_name,
+            "details": {},
+            "summary_table": [],
+            "inventory": [],
+            "amenities": []
+        }
         
-        # أ) استخراج تفاصيل المشروع (العمود A و B عادة)
+        # أ) استخراج التفاصيل العامة (العمود A و B)
         for idx, row in df.iterrows():
-            key = str(row.iloc[0]).strip()
-            val = str(row.iloc[1]).strip()
-            if key.lower() == "project name": project_info["name"] = val
-            elif key and val and key.lower() not in ["field", "value"]:
-                # التوقف عند الوصول لأقسام أخرى في العمود الأول
-                if any(x in key.lower() for x in ["payment plan", "amenities", "location"]): break
-                project_info["details"][key] = val
+            key, val = str(row.iloc[0]).strip(), str(row.iloc[1]).strip()
+            if not key: continue
+            
+            # التوقف عند بداية الجداول الفرعية
+            if any(x in key.lower() for x in ["unit type", "payment plan", "amenities", "location"]): break
+            
+            if key.lower() == "project name": project["name"] = val
+            elif val:
+                # تنسيق التاريخ والنسب المئوية
+                if "date" in key.lower() or "added" in key.lower():
+                    val = val.split(' ')[0] # حذف الوقت من التاريخ
+                if "progress" in key.lower() and val == "1": val = "100%"
+                project["details"][key] = val
 
-        # ب) البحث الديناميكي عن جدول الوحدات (البحث عن خلية Unit No.)
+        # ب) استخراج جدول ملخص الوحدات (Unit Type, Count, etc.)
+        summary_idx = df[df.iloc[:, 0].str.lower().str.contains("unit type", na=False)].index
+        if not summary_idx.empty:
+            start_r = summary_idx[0]
+            headers = [h for h in df.iloc[start_r] if h]
+            for r in range(start_r + 1, start_r + 5):
+                row_vals = df.iloc[r, :len(headers)].tolist()
+                if row_vals[0] and "bedroom" in row_vals[0].lower():
+                    project["summary_table"].append(dict(zip(headers, row_vals)))
+
+        # ج) استخراج جدول المخزون الكامل (Unit No.) ديناميكياً
         unit_row_idx, unit_col_idx = -1, -1
         for r_idx, row in df.iterrows():
             for c_idx, cell in enumerate(row):
@@ -60,67 +76,60 @@ def load_data(file_path):
                     break
             if unit_row_idx != -1: break
 
-        # ج) قراءة جدول الوحدات إذا وجد
         if unit_row_idx != -1:
-            # استخراج العناوين من صف "Unit No."
             headers = [str(h).strip() for h in df.iloc[unit_row_idx, unit_col_idx:] if str(h).strip()]
-            
-            # قراءة الصفوف التالية للرأس
             for r in range(unit_row_idx + 1, len(df)):
-                current_row = df.iloc[r, unit_col_idx : unit_col_idx + len(headers)].tolist()
-                
-                # التحقق من أن الصف ليس فارغاً أو بداية قسم جديد
-                first_cell = str(df.iloc[r, 0]).lower()
-                if any(x in first_cell for x in ["payment plan", "location", "amenities", "features"]): break
-                
-                if any(str(c).strip() for c in current_row):
-                    unit_dict = dict(zip(headers, current_row))
-                    # تنظيف: استبعاد الصفوف التي هي مجرد عناوين فرعية (مثل "1 Bedroom Units")
-                    u_no = str(unit_dict.get(headers[0], "")).lower()
-                    if u_no and "bedroom" not in u_no and "studio" not in u_no and "units" not in u_no:
-                        project_info["units"].append(unit_dict)
-                        
-        all_data[sheet_name] = [project_info]
+                row_data = df.iloc[r, unit_col_idx : unit_col_idx + len(headers)].tolist()
+                u_no = str(row_data[0]).strip()
+                if u_no and not any(x in u_no.lower() for x in ["bedroom", "unit", "summary"]):
+                    project["inventory"].append(dict(zip(headers, row_data)))
+                elif u_no == "" and r > unit_row_idx + 5: break # توقف إذا زادت الصفوف الفارغة
+
+        all_data[sheet_name] = project
     return all_data
 
-# 5. واجهة العرض
+# 5. واجهة العرض (Ahmed Dash Luxury UI)
 st.sidebar.title("Dubai Real Estate")
 st.sidebar.markdown("<p class='gold-text'>Luxury Portfolio</p>", unsafe_allow_html=True)
 
-current_dir = os.path.dirname(__file__)
-file_path = os.path.join(current_dir, "Project (1) - Copy.xlsx")
-
-if not os.path.exists(file_path):
-    file_path = r"d:\mr pual\Project (1) - Copy.xlsx"
+file_path = os.path.join(os.path.dirname(__file__), "Project (1) - Copy.xlsx")
+if not os.path.exists(file_path): file_path = r"d:\mr pual\Project (1) - Copy.xlsx"
 
 try:
     data = load_data(file_path)
-    regions = list(data.keys())
-    selected_region = st.sidebar.selectbox("📍 Select Region/Sheet", regions)
+    selected_region = st.sidebar.selectbox("📍 Select Region", list(data.keys()))
     
     if selected_region:
-        project = data[selected_region][0]
-        st.title(f"{project['name']}")
+        project = data[selected_region]
+        st.title(f"🏙️ {project['name']}")
         
-        tab1, tab2 = st.tabs(["🏗️ Details & Amenities", "🔑 Inventory"])
+        tab1, tab2, tab3 = st.tabs(["📋 Project Overview", "📊 Inventory Summary", "🔑 Detailed Inventory"])
         
         with tab1:
-            col1, col2 = st.columns(2)
-            with col1:
-                for k, v in list(project["details"].items())[:8]: st.write(f"**{k}:** {v}")
-            with col2:
-                for k, v in list(project["details"].items())[8:]: st.write(f"**{k}:** {v}")
-                
+            st.subheader("Development Details")
+            cols = st.columns(2)
+            items = list(project["details"].items())
+            mid = (len(items) + 1) // 2
+            for i, (k, v) in enumerate(items):
+                cols[0 if i < mid else 1].markdown(f"**{k}:** <span style='color:#DDD'>{v}</span>", unsafe_allow_html=True)
+        
         with tab2:
-            if project["units"]:
-                df_units = pd.DataFrame(project["units"])
-                # تنظيف الأرقام ديناميكياً
-                for col in df_units.columns:
+            if project["summary_table"]:
+                st.subheader("Inventory Snapshot")
+                st.table(pd.DataFrame(project["summary_table"]))
+            else: st.info("No summary table available.")
+
+        with tab3:
+            if project["inventory"]:
+                df_inv = pd.DataFrame(project["inventory"])
+                # تنظيف الأرقام للترتيب (Sorting)
+                for col in df_inv.columns:
                     if any(x in col.lower() for x in ["price", "size"]):
-                        df_units[col] = pd.to_numeric(df_units[col].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce')
+                        df_inv[col] = pd.to_numeric(df_inv[col].str.replace(r'[^\d.]', '', regex=True), errors='coerce')
                 
-                st.dataframe(df_units, use_container_width=True, hide_index=True)
-            else:
-                st.info("No unit data found using the dynamic scanner.")
+                st.subheader("Available Units")
+                st.dataframe(df_inv, use_container_width=True, hide_index=True)
+            else: st.info("Inventory table not detected.")
+
 except Exception as e:
-    st.error(f"Error: {e}")
+    st.error(f"Error loading dashboard: {e}")
