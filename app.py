@@ -3,22 +3,22 @@ import pandas as pd
 import numpy as np
 import os
 
-# 1. إعداد الصفحة الأساسي
+# 1. إعداد الصفحة الأساسي (Page Configuration)
 st.set_page_config(page_title="Dubai Real Estate Dashboard", page_icon="🏢", layout="wide")
 
-# 2. واجهة الدخول والأمان (Ahmed Dash Protection)
+# 2. نظام حماية وأمان أحمد داش (Password Protection)
 st.sidebar.title("🛡️ Secure Access")
 password = st.sidebar.text_input("Enter Password to Unlock", type="password")
 
+# التحقق من كلمة المرور قبل تحميل أي بيانات أو عرض الواجهة
 if password != "AhmedDash2026":
-    st.title("Welcome to Dubai Luxury Real Estate Portfolio")
+    st.title("Dubai Luxury Real Estate Portfolio")
     st.markdown("---")
     if password == "":
-        st.info("Please enter the access code provided by **Ahmed Dash** in the sidebar to view the data.")
+        st.info("👋 Welcome! Please enter the access code provided by **Ahmed Dash** to view the portfolio.")
     else:
-        st.error("Invalid password. Access to the portfolio is restricted.")
-    
-    st.stop() # توقف كامل للبرنامج ومنع قراءة ملف الإكسيل
+        st.error("🚫 Access Denied: Invalid Password.")
+    st.stop() # إيقاف البرنامج تماماً لمنع تسريب البيانات
 
 # 3. تصميم الواجهة الفاخرة (Luxury Dubai Aesthetic)
 st.markdown("""
@@ -32,7 +32,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 4. وظيفة تحميل ومعالجة البيانات
+# 4. وظيفة تحميل ومعالجة بيانات الإكسيل (Data Core)
 @st.cache_data
 def load_data(file_path):
     xl = pd.ExcelFile(file_path)
@@ -51,12 +51,14 @@ def load_data(file_path):
             key = str(row.iloc[0]).strip()
             val = str(row.iloc[1]).strip()
             
+            # التقاط اسم المشروع وبيانات الـ Overview
             if "project name" in key.lower():
                 current_project["name"] = val
             elif key.lower() not in ["", "nan", "field", "value"]:
                 if val.lower() not in ["", "nan"]:
                     current_project["details"][key] = val
             
+            # تحديد بداية جدول الوحدات (Inventory)
             if not in_units_section:
                 for i, cell in enumerate(row):
                     c_text = str(cell).strip().lower()
@@ -67,8 +69,10 @@ def load_data(file_path):
                         break
                 continue 
             
+            # جمع بيانات الوحدات السكنية
             if in_units_section:
                 unit_row = [str(x).strip() for x in row.iloc[unit_start_col_idx:]]
+                # التوقف عند نهاية الجدول
                 if "unit type" in str(row.iloc[0]).lower() or "payment plan" in str(row.iloc[0]).lower():
                     in_units_section = False
                     continue
@@ -82,25 +86,25 @@ def load_data(file_path):
         data[sheet_name] = projects
     return data
 
-# ---- منطق واجهة المستخدم المتقدمة ----
+# 5. منطق واجهة المستخدم (User Interface Logic)
 st.sidebar.markdown("---")
 st.sidebar.title("Dubai Real Estate")
 st.sidebar.markdown("<p class='gold-text'>Luxury Portfolio</p>", unsafe_allow_html=True)
 
-# مسار الملف (يبحث في المجلد الحالي لسهولة التشغيل عند العميل)
+# تحديد مسار الملف (قاعدة البيانات)
 current_dir = os.path.dirname(__file__)
 file_path = os.path.join(current_dir, "Project (1) - Copy.xlsx")
 
-if not os.path.exists(file_path):
-    file_path = r"d:\mr pual\Project (1) - Copy.xlsx"
-
+# محاولة تحميل البيانات
 try:
     data = load_data(file_path)
 except Exception as e:
-    st.error(f"Error: Could not find or read the Excel file. {e}")
+    st.error(f"⚠️ Error: Excel file not found or corrupted. Please ensure 'Project (1) - Copy.xlsx' is in the repository. {e}")
     st.stop()
 
-selected_region = st.sidebar.selectbox("📍 Select Region", list(data.keys()))
+# اختيار المنطقة والمشروع
+regions = list(data.keys())
+selected_region = st.sidebar.selectbox("📍 Select Region", regions)
 
 if selected_region:
     projects = data[selected_region]
@@ -119,6 +123,7 @@ if selected_region:
         with tab2:
             st.subheader("Location")
             if "District" in det: st.markdown(f"**District:** {det['District']}")
+            elif "Location" in det: st.markdown(f"**Location:** {det['Location']}")
         with tab3:
             st.subheader("Amenities & Notes")
             for k, v in det.items():
@@ -128,11 +133,14 @@ if selected_region:
         st.markdown("---")
         st.header("🔑 Available Inventory Filter")
         
+        # عرض وجدولة الوحدات المتاحة
         if project["units"]:
             df_units = pd.DataFrame(project["units"])
+            # البحث عن عمود "نوع الغرف"
             type_col = next((c for c in df_units.columns if any(x in c.lower() for x in ["type", "bedroom"])), None)
             
             if type_col:
+                # تنظيف القائمة المنسدلة من "الضوضاء"
                 valid_keywords = ['bedroom', 'studio', 'br', 'penthouse', 'duplex']
                 mask = df_units[type_col].str.lower().apply(lambda x: any(k in str(x) for k in valid_keywords))
                 df_units = df_units[mask]
@@ -142,11 +150,21 @@ if selected_region:
                 if sel_type != "All":
                     df_units = df_units[df_units[type_col] == sel_type]
 
-            # تنسيق العملة والمساحة
+            # --- التعديل الجوهري لمعالجة أرقام الأسعار والمساحات (Fixing ValueError) ---
             for col in df_units.columns:
                 if any(x in col.lower() for x in ["price", "size"]):
-                    df_units[col] = pd.to_numeric(df_units[col].str.replace(',', '').str.replace('AED', '').str.strip(), errors='ignore')
+                    try:
+                        # تنظيف البيانات من الكلمات التي تسبب عطل مثل "from" أو "AED" أو الفواصل
+                        clean_col = df_units[col].astype(str).str.replace(',', '', regex=False)
+                        clean_col = clean_col.str.replace('AED', '', regex=False)
+                        clean_col = clean_col.str.replace('from', '', regex=False).str.strip()
+                        
+                        # تحويل القيم لأرقام حقيقية (مع تجاهل الأخطاء بتحويلها لـ NaN)
+                        df_units[col] = pd.to_numeric(clean_col, errors='coerce')
+                    except Exception:
+                        pass
             
+            # عرض الجدول النهائي
             st.dataframe(df_units, use_container_width=True, hide_index=True)
         else:
-            st.info("No units available for this project.")
+            st.info("No units available for this project at the moment.")
