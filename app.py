@@ -10,7 +10,7 @@ st.set_page_config(page_title="Dubai Real Estate Dashboard", page_icon="🏢", l
 
 st.sidebar.title("🛡️ Secure Access")
 password = st.sidebar.text_input("Enter Password", type="password")
-if password != "AhmedDash2026":
+if password != "hhhhhblshfa":
     st.title("Dubai Luxury Real Estate Portfolio")
     st.markdown("---")
     st.info("👋 Welcome! Please enter the access code provided by **Ahmed Dash** to unlock the dashboard.")
